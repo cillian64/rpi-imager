@@ -1221,29 +1221,6 @@ ApplicationWindow {
         }
     }
 
-    /* Utility functions */
-    function httpRequest(url, callback) {
-        var xhr = new XMLHttpRequest();
-        xhr.timeout = 5000
-        xhr.onreadystatechange = (function(x) {
-            return function() {
-                if (x.readyState === x.DONE)
-                {
-                    if (x.status === 200)
-                    {
-                        callback(x)
-                    }
-                    else
-                    {
-                        onError(qsTr("Error downloading OS list from Internet"))
-                    }
-                }
-            }
-        })(xhr)
-        xhr.open("GET", url)
-        xhr.send()
-    }
-
     /* Slots for signals imagewrite emits */
     function onDownloadProgress(now,total) {
         var newPos
@@ -1508,79 +1485,79 @@ ApplicationWindow {
     }
 
     function fetchOSlist() {
-        httpRequest(imageWriter.constantOsListUrl(), function (x) {
-            var o = JSON.parse(x.responseText)
-            var oslist = oslistFromJson(o)
-            if (oslist === false)
-                return
-            osmodel.clear()
-            for (var i in oslist) {
-                osmodel.append(oslist[i])
-            }
+        var oslist_json = imageWriter.getOSlist(imageWriter.constantOsListUrl());
 
-            if ("imager" in o) {
-                var imager = o["imager"]
+        var o = JSON.parse(oslist_json)
+        var oslist = oslistFromJson(o)
+        if (oslist === false)
+            return
+        osmodel.clear()
+        for (var i in oslist) {
+            osmodel.append(oslist[i])
+        }
 
-                if ("devices" in imager)
+        if ("imager" in o) {
+            var imager = o["imager"]
+
+            if ("devices" in imager)
+            {
+                deviceModel.clear()
+                var devices = imager["devices"]
+                for (var j in devices)
                 {
-                    deviceModel.clear()
-                    var devices = imager["devices"]
-                    for (var j in devices)
+                    devices[j]["tags"] = JSON.stringify(devices[j]["tags"])
+                    deviceModel.append(devices[j])
+                    if ("default" in devices[j] && devices[j]["default"])
                     {
-                        devices[j]["tags"] = JSON.stringify(devices[j]["tags"])
-                        deviceModel.append(devices[j])
-                        if ("default" in devices[j] && devices[j]["default"])
-                        {
-                            hwlist.currentIndex = deviceModel.count-1
-                        }
-                    }
-                }
-
-                if (imageWriter.getBoolSetting("check_version") && "latest_version" in imager && "url" in imager) {
-                    if (!imageWriter.isEmbeddedMode() && imageWriter.isVersionNewer(imager["latest_version"])) {
-                        updatepopup.url = imager["url"]
-                        updatepopup.openPopup()
-                    }
-                }
-                if ("default_os" in imager) {
-                    selectNamedOS(imager["default_os"], osmodel)
-                }
-                if (imageWriter.isEmbeddedMode()) {
-                    if ("embedded_default_os" in imager) {
-                        selectNamedOS(imager["embedded_default_os"], osmodel)
-                    }
-                    if ("embedded_default_destination" in imager) {
-                        imageWriter.startDriveListPolling()
-                        setDefaultDest.drive = imager["embedded_default_destination"]
-                        setDefaultDest.start()
+                        hwlist.currentIndex = deviceModel.count-1
                     }
                 }
             }
 
-            /* Add in our 'special' items. */
-            osmodel.append({
-                url: "internal://format",
-                icon: "icons/erase.png",
-                extract_size: 0,
-                image_download_size: 0,
-                extract_sha256: "",
-                contains_multiple_files: false,
-                release_date: "",
-                subitems_url: "",
-                subitems_json: "",
-                name: qsTr("Erase"),
-                description: qsTr("Format card as FAT32"),
-                tooltip: "",
-                website: "",
-                init_format: ""
-            })
+            if (imageWriter.getBoolSetting("check_version") && "latest_version" in imager && "url" in imager) {
+                if (!imageWriter.isEmbeddedMode() && imageWriter.isVersionNewer(imager["latest_version"])) {
+                    updatepopup.url = imager["url"]
+                    updatepopup.openPopup()
+                }
+            }
+            if ("default_os" in imager) {
+                selectNamedOS(imager["default_os"], osmodel)
+            }
+            if (imageWriter.isEmbeddedMode()) {
+                if ("embedded_default_os" in imager) {
+                    selectNamedOS(imager["embedded_default_os"], osmodel)
+                }
+                if ("embedded_default_destination" in imager) {
+                    imageWriter.startDriveListPolling()
+                    setDefaultDest.drive = imager["embedded_default_destination"]
+                    setDefaultDest.start()
+                }
+            }
+        }
 
-            osmodel.append({
-                url: "",
-                icon: "icons/use_custom.png",
-                name: qsTr("Use custom"),
-                description: qsTr("Select a custom .img from your computer")
-            })
+        /* Add in our 'special' items. */
+        osmodel.append({
+            url: "internal://format",
+            icon: "icons/erase.png",
+            extract_size: 0,
+            image_download_size: 0,
+            extract_sha256: "",
+            contains_multiple_files: false,
+            release_date: "",
+            subitems_url: "",
+            subitems_json: "",
+            name: qsTr("Erase"),
+            description: qsTr("Format card as FAT32"),
+            tooltip: "",
+            website: "",
+            init_format: ""
+        })
+
+        osmodel.append({
+            url: "",
+            icon: "icons/use_custom.png",
+            name: qsTr("Use custom"),
+            description: qsTr("Select a custom .img from your computer")
         })
     }
 
@@ -1648,30 +1625,30 @@ ApplicationWindow {
         }
 
         /* Reload list */
-        httpRequest(imageWriter.constantOsListUrl(), function (x) {
-            var o = JSON.parse(x.responseText)
-            var oslist = oslistFromJson(o)
-            if (oslist === false)
-                return
+        var oslist_json = imageWriter.getOSlist(imageWriter.constantOsListUrl());
 
-            /* As we're filtering the OS list, we need to ensure we present a 'Recommended' OS.
-             * To do this, we exploit a convention of how we build the OS list. By convention,
-             * the preferred OS for a device is listed at the top level of the list, and is at the
-             * lowest index. So..
-             */
-            if (oslist.length != 0) {
-                var candidate = oslist[0]
+        var o = JSON.parse(oslist_json)
+        var oslist = oslistFromJson(o)
+        if (oslist === false)
+            return
 
-                if ("description" in candidate && !("subitems" in candidate)) {
-                    candidate["description"] += " (Recommended)"
-                }
+        /* As we're filtering the OS list, we need to ensure we present a 'Recommended' OS.
+            * To do this, we exploit a convention of how we build the OS list. By convention,
+            * the preferred OS for a device is listed at the top level of the list, and is at the
+            * lowest index. So..
+            */
+        if (oslist.length != 0) {
+            var candidate = oslist[0]
+
+            if ("description" in candidate && !("subitems" in candidate)) {
+                candidate["description"] += " (Recommended)"
             }
+        }
 
-            osmodel.remove(0, osmodel.count-2)
-            for (var i in oslist) {
-                osmodel.insert(osmodel.count-2, oslist[i])
-            }
-        })
+        osmodel.remove(0, osmodel.count-2)
+        for (var i in oslist) {
+            osmodel.insert(osmodel.count-2, oslist[i])
+        }
 
         // When the HW device is changed, reset the OS selection otherwise
         // you get a weird effect with the selection moving around in the list
@@ -1736,15 +1713,14 @@ ApplicationWindow {
                 var suburl = d.subitems_url
                 var m = newSublist()
 
-                httpRequest(suburl, function (x) {
-                    var o = JSON.parse(x.responseText)
-                    var oslist = oslistFromJson(o)
-                    if (oslist === false)
-                        return
-                    for (var i in oslist) {
-                        m.append(oslist[i])
-                    }
-                })
+                var oslist_json = imageWriter.getOSlist(suburl);
+                var o = JSON.parse(oslist_json)
+                var oslist = oslistFromJson(o)
+                if (oslist === false)
+                    return
+                for (var i in oslist) {
+                    m.append(oslist[i])
+                }
 
                 osswipeview.itemAt(osswipeview.currentIndex+1).currentIndex = (selectFirstSubitem === true) ? 0 : -1
                 osswipeview.incrementCurrentIndex()

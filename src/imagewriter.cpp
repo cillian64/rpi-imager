@@ -416,6 +416,35 @@ void ImageWriter::setCustomOsListUrl(const QUrl &url)
     _repo = url;
 }
 
+QByteArray ImageWriter::getOSlist(const QUrl &url)
+{
+    qDebug() << "Downloading OS list from " << url;
+
+    QNetworkAccessManager manager;
+    QNetworkRequest request = QNetworkRequest(url);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply *reply = manager.get(request);
+
+    // Setup request timeout
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, [reply]() {
+        qDebug() << "OS list fetch timed out.";
+        reply->abort();
+    });
+    timeout.start(2000);
+
+    // Block until reply received. TODO make this non-blocking, probably by polling.
+    QEventLoop blockLoop;
+    QObject::connect(reply, &QNetworkReply::finished, &blockLoop, &QEventLoop::quit);
+    blockLoop.exec();
+
+    auto topLevelOSList = reply->readAll();
+
+    return topLevelOSList;
+}
+
 void ImageWriter::setCustomCacheFile(const QString &cacheFile, const QByteArray &sha256)
 {
     _cacheFileName = cacheFile;

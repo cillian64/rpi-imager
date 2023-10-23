@@ -74,6 +74,9 @@ public:
     /* Set custom repository */
     Q_INVOKABLE void setCustomOsListUrl(const QUrl &url);
 
+    /* Fetch the JSON OS list from the currently set repo URL */
+    Q_INVOKABLE QByteArray getOSlist(const QUrl &url);
+
     /* Set custom cache file */
     void setCustomCacheFile(const QString &cacheFile, const QByteArray &sha256);
 
