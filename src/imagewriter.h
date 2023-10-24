@@ -74,8 +74,12 @@ public:
     /* Set custom repository */
     Q_INVOKABLE void setCustomOsListUrl(const QUrl &url);
 
-    /* Fetch the JSON OS list from the currently set repo URL */
+    /* Fetch a single JSON OS list from the currently set repo URL,
+       not populating any sub-lists */
     Q_INVOKABLE QByteArray getOSlist(const QUrl &url);
+
+    /* Fetch the full JSON OS list, populating all referenced sublists */
+    Q_INVOKABLE QByteArray getFullOSlist();
 
     /* Set custom cache file */
     void setCustomCacheFile(const QString &cacheFile, const QByteArray &sha256);
@@ -163,6 +167,11 @@ protected slots:
     void onFinalizing();
     void onTimeSyncReply(QNetworkReply *reply);
     void onPreparationStatusUpdate(QString msg);
+
+private:
+    // Recursively walk all the entries with subitems and, for any which
+    // refer to an external JSON list, fetch the list and put it in place.
+    void fillSubLists(QJsonArray &topLevel);
 
 protected:
     QUrl _src, _repo;

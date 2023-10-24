@@ -1485,8 +1485,7 @@ ApplicationWindow {
     }
 
     function fetchOSlist() {
-        var oslist_json = imageWriter.getOSlist(imageWriter.constantOsListUrl());
-
+        var oslist_json = imageWriter.getFullOSlist();
         var o = JSON.parse(oslist_json)
         var oslist = oslistFromJson(o)
         if (oslist === false)
@@ -1625,8 +1624,7 @@ ApplicationWindow {
         }
 
         /* Reload list */
-        var oslist_json = imageWriter.getOSlist(imageWriter.constantOsListUrl());
-
+        var oslist_json = imageWriter.getFullOSlist();
         var o = JSON.parse(oslist_json)
         var oslist = oslistFromJson(o)
         if (oslist === false)
@@ -1714,6 +1712,7 @@ ApplicationWindow {
                 var m = newSublist()
 
                 var oslist_json = imageWriter.getOSlist(suburl);
+                console.error("We should never get here because the backend pre-flattens");
                 var o = JSON.parse(oslist_json)
                 var oslist = oslistFromJson(o)
                 if (oslist === false)

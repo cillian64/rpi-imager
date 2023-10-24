@@ -418,7 +418,7 @@ void ImageWriter::setCustomOsListUrl(const QUrl &url)
 
 QByteArray ImageWriter::getOSlist(const QUrl &url)
 {
-    qDebug() << "Downloading OS list from " << url;
+    // qDebug() << "Downloading OS list from " << url;
 
     QNetworkAccessManager manager;
     QNetworkRequest request = QNetworkRequest(url);
@@ -440,9 +440,78 @@ QByteArray ImageWriter::getOSlist(const QUrl &url)
     QObject::connect(reply, &QNetworkReply::finished, &blockLoop, &QEventLoop::quit);
     blockLoop.exec();
 
-    auto topLevelOSList = reply->readAll();
+    return reply->readAll();
+}
 
-    return topLevelOSList;
+QByteArray ImageWriter::getFullOSlist() {
+    auto topLevel = QJsonDocument::fromJson(getOSlist(constantOsListUrl())).object();
+
+    if (topLevel.contains("os_list")) {
+        auto entries = topLevel["os_list"].toArray();
+        fillSubLists(entries);
+
+        // Grabbing the "entries" item looks like a reference
+        // but actually acts more like a copy (I think it's CoW internally?)
+        topLevel["os_list"] = entries;
+    } else {
+        qDebug() << "Top level OS list doesn't contain os_list key";
+    }
+
+    return QJsonDocument(topLevel).toJson();
+}
+
+void ImageWriter::fillSubLists(QJsonArray &entries) {
+    // TODO: Fill in sublists, recursively, detecting loops
+
+    for (int i = 0; i < entries.size(); i++) {
+        auto entry = entries[i].toObject();
+        auto name = entry["name"].toString();
+
+        if (entry.contains("subitems")) {
+            auto subItems = entry["subitems"].toArray();
+            // qDebug() << "Entry" << name << "has" << subItems.size() << "subitems directly";
+
+            // Recurse onto the direct subitems
+            fillSubLists(subItems);
+
+            // Assume that this modified subItems and so we need to rewrite
+            // it into the main entries list.
+            entry["subitems"] = subItems;
+            entries.replace(i, entry);
+        } else if (entry.contains("subitems_url")) {
+            auto url = entry["subitems_url"].toString();
+            qDebug() << "Entry" << name << "has subitems at URL" << url;
+
+            // Fetch and splice in the subitems
+            auto subListJSON = getOSlist(url);
+            auto subList = QJsonDocument::fromJson(subListJSON).object();
+            if (subList.contains("os_list")) {
+                // We now need to recurse into the newly filled-in items,
+                // because some external JSON lists contain further external
+                // references.  We'll want to add a depth-limit here to guard
+                // against loops or any other crazyness.
+                qDebug() << "Filling in subitems in external JSON document";
+                auto subSubList = subList["os_list"].toArray();
+                fillSubLists(subSubList);
+
+                qDebug() << "Splicing in external JSON document";
+                entry.insert("subitems", subSubList);
+            } else {
+                qDebug() << "Entry" << name << "JSON is missing os_list key";
+                // Still remove subitems_url and just leave it as an empty
+                // stub containing no subitems.
+                entry.insert("subitems", QJsonArray());
+            }
+            entry.remove("subitems_url");
+
+            // When we reference an entry in a QJsonArray it makes a CoW-style
+            // reference so we can't mutate the original.  So swap out the
+            // original entry with our modified one.
+            entries.replace(i, entry);
+        } else {
+            // qDebug() << "Entry" << name << "has no subitems";
+        }
+    }
 }
 
 void ImageWriter::setCustomCacheFile(const QString &cacheFile, const QByteArray &sha256)
